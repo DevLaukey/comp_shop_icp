@@ -139,9 +139,6 @@ export function searchComputers(query: string): Result<Vec<Computer>, string> {
   return Result.Ok(filteredComputers);
 }
 
-// Import necessary dependencies and modules
-
-// Define a function to check the stock and generate notifications
 $update;
 export function checkLowStock(): Result<Vec<string>, string> {
   const lowStockNotification: string[] = [];
