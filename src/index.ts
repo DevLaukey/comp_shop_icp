@@ -17,7 +17,7 @@ type Computer = Record<{
   brand: string;
   model: string;
   price: float64;
-  quantity: number; // Define quantity as a number
+  quantity: number;
   description: string;
 }>;
 
