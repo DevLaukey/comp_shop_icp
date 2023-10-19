@@ -1,0 +1,38 @@
+type Computer = record {
+  id : text;
+  model : text;
+  description : text;
+  quantity : float64;
+  brand : text;
+  price : float64;
+};
+type ComputerPayload = record {
+  model : text;
+  description : text;
+  quantity : float64;
+  brand : text;
+  price : float64;
+};
+type _AzleResult = variant { Ok : Computer; Err : text };
+type _AzleResult_1 = variant { Ok : vec text; Err : text };
+type _AzleResult_2 = variant { Ok : text; Err : text };
+type _AzleResult_3 = variant { Ok : float64; Err : text };
+type _AzleResult_4 = variant { Ok : vec Computer; Err : text };
+service : () -> {
+  addComputer : (ComputerPayload) -> (_AzleResult);
+  checkLowStock : () -> (_AzleResult_1);
+  clearLowStockNotifications : () -> (_AzleResult_2);
+  deleteComputer : (text) -> (_AzleResult);
+  getComputer : (text) -> (_AzleResult) query;
+  getComputerDescription : (text) -> (_AzleResult_2) query;
+  getComputerQuantity : (text) -> (_AzleResult_3) query;
+  getComputers : () -> (_AzleResult_4) query;
+  getComputersByPriceRange : (float64, float64) -> (_AzleResult_4) query;
+  getTotalInventoryValue : () -> (_AzleResult_3) query;
+  listComputerBrands : () -> (_AzleResult_1) query;
+  resupplyComputer : (text, float64) -> (_AzleResult);
+  searchComputers : (text) -> (_AzleResult_4) query;
+  sellComputer : (text, float64) -> (_AzleResult);
+  setComputerPrice : (text, float64) -> (_AzleResult) query;
+  updateComputer : (text, ComputerPayload) -> (_AzleResult);
+}
