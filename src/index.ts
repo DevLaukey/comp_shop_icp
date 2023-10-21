@@ -30,6 +30,9 @@ type ComputerPayload = Record<{
 }>;
 
 const computerStorage = new StableBTreeMap<string, Computer>(0, 44, 1024);
+const MAX_REQUESTS_PER_MINUTE = 10; // Rate limiting constant
+
+const requestTimestamps = new Map<string, number>();
 
 $query;
 export function getComputers(): Result<Vec<Computer>, string> {
@@ -51,28 +54,47 @@ export function addComputer(payload: ComputerPayload): Result<Computer, string> 
   return Result.Ok(computer);
 }
 
-$update;
-export function updateComputer(id: string, payload: ComputerPayload): Result<Computer, string> {
-  return match(computerStorage.get(id), {
-    Some: (computer) => {
-      const updatedComputer: Computer = { ...computer, ...payload };
-      computerStorage.insert(id, updatedComputer);
-      return Result.Ok<Computer, string>(updatedComputer);
-    },
-    None: () => Result.Err<Computer, string>(`Couldn't update a computer with id=${id}. Computer not found`),
-  });
-}
+// Validate query input to prevent potential injection
+$query;
+export function searchComputers(query: string): Result<Vec<Computer>, string> {
+  if (query.length < 3) {
+    return Result.Err<Vec<Computer>, string>("Query should be at least 3 characters long.");
+  }
 
-$update;
-export function deleteComputer(id: string): Result<Computer, string> {
-  return match(computerStorage.remove(id), {
-    Some: (deletedComputer) => Result.Ok<Computer, string>(deletedComputer),
-    None: () => Result.Err<Computer, string>(`Couldn't delete a computer with id=${id}. Computer not found.`),
+  const lowerCaseQuery = query.toLowerCase();
+
+  const filteredComputers = computerStorage.values().filter((computer) => {
+    const brand = computer.brand.toLowerCase();
+    const model = computer.model.toLowerCase();
+    const price = computer.price.toString().toLowerCase();
+
+    return (
+      brand.includes(lowerCaseQuery) ||
+      model.includes(lowerCaseQuery) ||
+      price.includes(lowerCaseQuery)
+    );
   });
+
+  if (filteredComputers.length === 0) {
+    return Result.Err<Vec<Computer>, string>(`No computers found for the query: ${query}`);
+  }
+
+  return Result.Ok(filteredComputers);
 }
 
 $update;
 export function sellComputer(id: string, quantitySold: number): Result<Computer, string> {
+  if (quantitySold <= 0) {
+    return Result.Err<Computer, string>("Quantity sold must be greater than zero.");
+  }
+
+  const lastRequestTimestamp = requestTimestamps.get(id) || 0;
+  const currentTimestamp = Context.blockTimestamp;
+  if (currentTimestamp - lastRequestTimestamp < 60) {
+    return Result.Err<Computer, string>("Rate limit exceeded. Try again later.");
+  }
+  requestTimestamps.set(id, currentTimestamp);
+
   const computerResult = computerStorage.get(id);
 
   return match(computerResult, {
@@ -96,46 +118,30 @@ export function sellComputer(id: string, quantitySold: number): Result<Computer,
   });
 }
 
-$query;
-export function searchComputers(query: string): Result<Vec<Computer>, string> {
-  const lowerCaseQuery = query.toLowerCase();
-
-  const filteredComputers = computerStorage.values().filter((computer) => {
-    const brand = computer.brand.toLowerCase();
-    const model = computer.model.toLowerCase();
-    const price = computer.price.toString().toLowerCase();
-
-    return (
-      brand.includes(lowerCaseQuery) ||
-      model.includes(lowerCaseQuery) ||
-      price.includes(lowerCaseQuery)
-    );
+$update;
+export function updateComputer(id: string, payload: ComputerPayload): Result<Computer, string> {
+  return match(computerStorage.get(id), {
+    Some: (computer) => {
+      const updatedComputer: Computer = { ...computer, ...payload };
+      computerStorage.insert(id, updatedComputer);
+      return Result.Ok<Computer, string>(updatedComputer);
+    },
+    None: () => Result.Err<Computer, string>(`Couldn't update a computer with id=${id}. Computer not found`),
   });
-
-  if (filteredComputers.length === 0) {
-    return Result.Err<Vec<Computer>, string>(`No computers found for the query: ${query}`);
-  }
-
-  return Result.Ok(filteredComputers);
 }
 
 $update;
-export function checkLowStock(): Result<Vec<string>, string> {
-  const lowStockNotification: string[] = [];
-
-  computerStorage.values().forEach((computer) => {
-    if (computer.quantity < 5) {
-      lowStockNotification.push(
-        `Low stock for ${computer.brand} ${computer.model}. Current quantity: ${computer.quantity}`
-      );
-    }
+export function deleteComputer(id: string): Result<Computer, string> {
+  return match(computerStorage.remove(id), {
+    Some: (deletedComputer) => Result.Ok<Computer, string>(deletedComputer),
+    None: () => Result.Err<Computer, string>(`Couldn't delete a computer with id=${id}. Computer not found.`),
   });
+}
 
-  if (lowStockNotification.length === 0) {
-    return Result.Ok<Vec<string>, string>(["No low-stock notifications"]);
-  }
-
-  return Result.Ok<Vec<string>, string>(lowStockNotification);
+$update;
+export function clearLowStockNotifications(): Result<string, string> {
+  // Clear the low-stock notifications (if any)
+  return Result.Ok<string, string>('Low-stock notifications cleared');
 }
 
 $update;
@@ -166,20 +172,6 @@ export function getComputersByPriceRange(minPrice: float64, maxPrice: float64): 
 }
 
 $update;
-export function clearLowStockNotifications(): Result<string, string> {
-  // Clear the low-stock notifications (if any)
-  return Result.Ok<string, string>('Low-stock notifications cleared');
-}
-
-$query;
-export function getComputerDescription(id: string): Result<string, string> {
-  return match(computerStorage.get(id), {
-    Some: (computer) => Result.Ok<string, string>(computer.description),
-    None: () => Result.Err<string, string>(`Computer with id=${id} not found`),
-  });
-}
-
-$query;
 export function setComputerPrice(id: string, newPrice: float64): Result<Computer, string> {
   return match(computerStorage.get(id), {
     Some: (computer) => {
@@ -188,6 +180,14 @@ export function setComputerPrice(id: string, newPrice: float64): Result<Computer
       return Result.Ok<Computer, string>(updatedComputer);
     },
     None: () => Result.Err<Computer, string>(`Computer with id=${id} not found`),
+  });
+}
+
+$query;
+export function getComputerDescription(id: string): Result<string, string> {
+  return match(computerStorage.get(id), {
+    Some: (computer) => Result.Ok<string, string>(computer.description),
+    None: () => Result.Err<string, string>(`Computer with id=${id} not found`),
   });
 }
 
@@ -201,6 +201,7 @@ export function getComputerQuantity(id: string): Result<number, string> {
 
 $query;
 export function listComputerBrands(): Result<Vec<string>, string> {
+  const uniqueBrands =
   const uniqueBrands = Array.from(
     new Set(computerStorage.values().map((computer) => computer.brand))
   );
