@@ -90,7 +90,9 @@ export function sellComputer(id: string, quantitySold: number): Result<Computer,
 
   const lastRequestTimestamp = requestTimestamps.get(id) || 0;
   const currentTimestamp = Context.blockTimestamp;
-  if (currentTimestamp - lastRequestTimestamp < 60) {
+
+  //changed to check if the time used is > 60 so as to log
+  if (currentTimestamp - lastRequestTimestamp >= 60) {
     return Result.Err<Computer, string>("Rate limit exceeded. Try again later.");
   }
   requestTimestamps.set(id, currentTimestamp);
@@ -201,7 +203,7 @@ export function getComputerQuantity(id: string): Result<number, string> {
 
 $query;
 export function listComputerBrands(): Result<Vec<string>, string> {
-  const uniqueBrands =
+// removed the empty func declaration
   const uniqueBrands = Array.from(
     new Set(computerStorage.values().map((computer) => computer.brand))
   );
